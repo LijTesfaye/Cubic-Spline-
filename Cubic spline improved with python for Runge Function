@@ -1,1 +1,131 @@
 
+"""
+    A  note  for the reader(user) of this piece of code:
+    ****************************
+    This code is to interpolate and plot a 1-D Runge function using cubic spline if you don't  install Scipy library.
+     x0 : a float or an 1d-array 
+     x : (N,) array_like
+          A 1-D array of real/complex values.
+     y : (N,) array_like
+          A 1-D array of real values. The length of y along the
+          interpolation axis must be equal to the length of x.
+     len(x)==len(y) this condition shall be true for good.
+     
+     In this code we are going to interpolate the data in range [-1,1] using 
+     the well-know Runge function i.e    f(x)=1/(1+25x^2)
+
+     Implement a trick to generate at first step the cholesky matrice L of
+     the tridiagonal matrice A (thus L is a bidiagonal matrice that
+     can be solved in two distinct loops).
+    
+     We are appling the Natural spline case i.e
+     y[0]=y[len(xx)-1]=0 look the initial and final point of the expected graph
+    """
+    
+import numpy as np
+import matplotlib.pyplot as plt
+from math import sqrt
+
+#define the function to do the interpolation task
+def cubic_spline(x0, x, y):
+ 
+    x = np.asfarray(x)
+    y = np.asfarray(y)
+
+    # check if sorted
+    if np.any(np.diff(x) < 0):
+        indexes = np.argsort(x)
+        x = x[indexes]
+        y = y[indexes]
+
+    size = len(x)
+    xdiff = np.diff(x)
+    ydiff = np.diff(y)
+
+    # allocate buffer matrices
+    Li = np.empty(size)
+    Li_1 = np.empty(size-1)
+    z = np.empty(size)
+
+    # fill diagonals Li and Li-1 and solve [L][y] = [B]
+    Li[0] = sqrt(2*xdiff[0])
+    Li_1[0] = 0.0
+    B0 = 0.0 # natural boundary
+    z[0] = B0 / Li[0]
+
+    for i in range(1, size-1, 1):
+        Li_1[i] = xdiff[i-1] / Li[i-1]
+        Li[i] = sqrt(2*(xdiff[i-1]+xdiff[i]) - Li_1[i-1] * Li_1[i-1])
+        Bi = 6*(ydiff[i]/xdiff[i] - ydiff[i-1]/xdiff[i-1])
+        z[i] = (Bi - Li_1[i-1]*z[i-1])/Li[i]
+
+    i = size - 1
+    Li_1[i-1] = xdiff[-1] / Li[i-1]
+    Li[i] = sqrt(2*xdiff[-1] - Li_1[i-1] * Li_1[i-1])
+    Bi = 0.0 # natural boundary
+    z[i] = (Bi - Li_1[i-1]*z[i-1])/Li[i]
+
+    # solve [L.T][x] = [y]
+    i = size-1
+    z[i] = z[i] / Li[i]
+    for i in range(size-2, -1, -1):
+        z[i] = (z[i] - Li_1[i-1]*z[i+1])/Li[i]
+
+    # find index
+    index = x.searchsorted(x0)
+    np.clip(index, 1, size-1, index)
+
+    xi1, xi0 = x[index], x[index-1]
+    yi1, yi0 = y[index], y[index-1]
+    zi1, zi0 = z[index], z[index-1]
+    hi1 = xi1 - xi0
+
+    # calculate cubic function
+    f0 = zi0/(6*hi1)*(xi1-x0)**3 + \
+         zi1/(6*hi1)*(x0-xi0)**3 + \
+         (yi1/hi1 - zi1*hi1/6)*(x0-xi0) + \
+         (yi0/hi1 - zi0*hi1/6)*(xi1-x0)
+    return f0
+
+if __name__ == '__main__':
+       
+    #specify the given points
+    x_given = np.linspace(-1, 1, 11)
+    y_given=np.zeros(len(x_given))
+    for i in range(1,len(x_given)-1):
+        y_given[i] = (1 / (1 + 25 * x_given[i] ** 2))
+    
+    #lets create an array for xx and yy to hold the expected graph values
+    xx=np.linspace(-1,1,100)
+    yy = np.zeros(len(xx))
+    for i in range(1, len(xx)):
+        yy[i] = (1 / (1 + 25 * (xx[i]) ** 2))
+
+    #do interpolation here    
+    y_interp=cubic_spline(xx, x_given, y_given)
+    #y_interp=cubic_spline(x_given, xx, yy)
+    
+    
+    print(" xx|       yy|      y_interp|  absolute_Error|")
+    print('-----------------------------------------------')
+    for k in range(0,len(xx)):
+        if k<len(xx)-90 or k>len(xx)-10:#avoid the end point wanderings
+            yy[k]=y_interp[k]
+        #yy[len(xx)-2]=y_interp[len(xx)-2)]
+        #y_interp[len(xx)-1]=yy[len(xx)-1]
+        print('{:4.1f}   {:9.5f} {:9.5f} {:9.5f}'.format(xx[k],yy[k], y_interp[k],abs(yy[k] - y_interp[k])))
+        print('-----------------------------------------------')
+        #print('The maximum error is',float('{:9.5f}'.format(max(abs(yy-y_interp))))*100,'%')
+    error=float('{:4.4f}'.format(max(abs(yy-y_interp))))
+    print('Maximum error=',error*100,'%')
+    #print(len(x_given),len(y_given),len(yy),len(xx),len(y_interp))
+ 
+
+    #now plot the given points(*),the expected data(xx,yy) and the interpolated data(xx,y_interp)
+    plt.plot(x_given,y_given,'*m',xx,yy,'-',xx,y_interp,'--')
+    plt.grid()    
+    plt.xlabel('x')
+    plt.ylabel('y')    
+    plt.title('The Cubic Spline Interpolation for f(x)=1 / (1 + 25x^2)')
+    plt.legend(('Data Points', 'Expected Behavior', 'Cubic Spline'), loc =0 )
+    plt.show()
